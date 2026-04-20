@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
-import { Search, Menu, X, UserCircle, Sun, Moon, LayoutDashboard } from 'lucide-vue-next'
+import { Search, Menu, X, Sun, Moon, LayoutDashboard } from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth.store'
 import { useUiStore } from '../../stores/ui.store'
