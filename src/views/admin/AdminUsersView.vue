@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { api } from '../../services/api';
 import { useUiStore } from '../../stores/ui.store';
-import { DollarSign, X } from 'lucide-vue-next';
+import { DollarSign, KeyRound, Copy, X } from 'lucide-vue-next';
 
 const ui = useUiStore();
 
@@ -19,6 +19,12 @@ const balanceModal = ref(false);
 const balanceUser = ref<any>(null);
 const balanceAmount = ref(0);
 const balanceSaving = ref(false);
+
+// Reset password modal
+const resetModal = ref(false);
+const resetUser = ref<any>(null);
+const resetSaving = ref(false);
+const resetResult = ref<string | null>(null);
 
 const fetchUsers = async () => {
   loading.value = true;
@@ -63,6 +69,42 @@ const submitBalance = async () => {
   }
 };
 
+const openResetModal = (user: any) => {
+  resetUser.value = user;
+  resetResult.value = null;
+  resetModal.value = true;
+};
+
+const closeResetModal = () => {
+  resetModal.value = false;
+  resetUser.value = null;
+  resetResult.value = null;
+};
+
+const confirmReset = async () => {
+  if (!resetUser.value) return;
+  resetSaving.value = true;
+  try {
+    const res = await api.post(`/users/${resetUser.value.id}/reset-password`);
+    resetResult.value = res.data.temporaryPassword;
+  } catch (err: any) {
+    ui.toast(err.response?.data?.message || 'Failed to reset password', 'error');
+    closeResetModal();
+  } finally {
+    resetSaving.value = false;
+  }
+};
+
+const copyPassword = async () => {
+  if (!resetResult.value) return;
+  try {
+    await navigator.clipboard.writeText(resetResult.value);
+    ui.toast('Password copied to clipboard', 'success');
+  } catch {
+    ui.toast('Could not copy — select and copy manually', 'error');
+  }
+};
+
 onMounted(fetchUsers);
 </script>
 
@@ -95,9 +137,14 @@ onMounted(fetchUsers);
             <td>${{ Number(u.balance || 0).toFixed(2) }}</td>
             <td class="text-muted">{{ new Date(u.createdAt).toLocaleDateString() }}</td>
             <td>
-              <button class="icon-action" title="Adjust balance" @click="openBalanceModal(u)">
-                <DollarSign :size="16" />
-              </button>
+              <div class="row-actions">
+                <button class="icon-action" title="Adjust balance" @click="openBalanceModal(u)">
+                  <DollarSign :size="16" />
+                </button>
+                <button class="icon-action" title="Reset password" @click="openResetModal(u)">
+                  <KeyRound :size="16" />
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -149,6 +196,56 @@ onMounted(fetchUsers);
       </div>
     </Transition>
   </Teleport>
+
+  <!-- Reset Password Modal -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="resetModal" class="modal-overlay" @click.self="closeResetModal">
+        <div class="modal-dialog">
+          <div class="modal-header">
+            <h3>{{ resetResult ? 'New password generated' : 'Reset password' }}</h3>
+            <button class="modal-close" @click="closeResetModal"><X :size="18" /></button>
+          </div>
+
+          <div class="modal-body">
+            <p class="modal-user-name">{{ resetUser?.name }}</p>
+            <p class="modal-user-email">{{ resetUser?.email }}</p>
+
+            <template v-if="!resetResult">
+              <p class="modal-warning">
+                A new random password will be generated and set for this user. The current password will be invalidated immediately.
+              </p>
+            </template>
+
+            <template v-else>
+              <p class="modal-warning modal-warning--strong">
+                Copy this password now — it will NOT be shown again.
+              </p>
+              <div class="password-display">
+                <code>{{ resetResult }}</code>
+                <button class="icon-action" title="Copy to clipboard" @click="copyPassword">
+                  <Copy :size="16" />
+                </button>
+              </div>
+              <p class="modal-hint">Share it with the user through a secure channel. Ask them to change it on next login.</p>
+            </template>
+          </div>
+
+          <div class="modal-footer">
+            <template v-if="!resetResult">
+              <button class="btn btn-primary" :disabled="resetSaving" @click="confirmReset">
+                {{ resetSaving ? 'Generating...' : 'Generate new password' }}
+              </button>
+              <button class="btn btn-outline" @click="closeResetModal">Cancel</button>
+            </template>
+            <template v-else>
+              <button class="btn btn-primary" @click="closeResetModal">Done</button>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -160,6 +257,8 @@ onMounted(fetchUsers);
 .mini-select { background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--border-radius-sm); padding: 0.3rem 0.5rem; font-size: 0.8rem; font-family: var(--font-sans); cursor: pointer; }
 .loading-state { display: flex; justify-content: center; padding: 4rem 0; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; }
+
+.row-actions { display: flex; gap: 0.25rem; }
 
 .icon-action {
   display: flex;
@@ -175,6 +274,41 @@ onMounted(fetchUsers);
   transition: all var(--transition-fast);
 }
 .icon-action:hover { background: var(--bg-input); color: var(--accent-primary); }
+
+.modal-warning {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.75rem;
+  line-height: 1.5;
+}
+.modal-warning--strong {
+  color: var(--danger, #ef4444);
+  font-weight: 500;
+}
+.password-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+}
+.password-display code {
+  font-family: var(--font-mono, monospace);
+  font-size: 1rem;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  user-select: all;
+}
+.modal-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+  line-height: 1.5;
+}
 
 /* ── Modal ── */
 .modal-overlay {
